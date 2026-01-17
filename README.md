@@ -1,4 +1,3 @@
-cat > README.md << 'EOF'
 # SOST Framework: System for Observing Systemic Transitions
 
 **A methodological triptych (DD • DD-R • Equilibrium) for observing systemic transitions. Strictly descriptive, non-compensable, and non-predictive.**

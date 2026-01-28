@@ -1,0 +1,59 @@
+name: SOST-Framework CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+env:
+  PYTHONHASHSEED: "0"
+  TZ: "UTC"
+  LC_ALL: "C.UTF-8"
+  LANG: "C.UTF-8"
+
+jobs:
+  lint-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile (sanity)
+        run: |
+          python -m compileall -q .
+
+      - name: Import smoke
+        run: |
+          python - <<'PY'
+          import sost
+          from sost import dd_coherence, dd_restoration, equilibrium
+          print("OK imports:", sost.__version__)
+          print(dd_coherence.__name__, dd_restoration.__name__, equilibrium.__name__)
+          PY
+
+      - name: Run SOST smoke (DD → DD-R → E)
+        run: |
+          python scripts/run_sost.py \
+            --input test_data/minimal_timeseries.csv \
+            --out _ci_out \
+            --run-id ci_smoke
+
+      - name: Check reports exist
+        run: |
+          test -f _ci_out/ci_smoke/dd/dd_report.json
+          test -f _ci_out/ci_smoke/ddr/ddr_report.json
+          test -f _ci_out/ci_smoke/e/e_report.json
+          test -f _ci_out/ci_smoke/run_manifest.json
+
+      - name: Upload reports artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sost-reports
+          path: _ci_out/

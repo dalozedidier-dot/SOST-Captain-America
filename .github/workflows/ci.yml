@@ -1,4 +1,4 @@
-name: band_suite
+name: ci
 
 on:
   workflow_dispatch:
@@ -18,6 +18,20 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Debug repo layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PWD=$(pwd)"
+          echo "ROOT:"
+          ls -la
+          echo "scripts/:"
+          ls -la scripts || true
+          echo "test_data/:"
+          ls -la test_data || true
+          echo "find band_*.csv (maxdepth 6):"
+          find . -maxdepth 6 -type f -name "band_*.csv" -print || true
+
       - name: Install dependencies
         shell: bash
         run: |
@@ -32,18 +46,51 @@ jobs:
             pip install .
           fi
 
-      - name: Run band suite (auto-detect CLI)
+      - name: Run band suite
+        id: run_suite
+        shell: bash
+        run: |
+          set +e
+          mkdir -p _ci_out
+          python scripts/ci_band_suite.py --outdir "_ci_out/bands" 2>&1 | tee _ci_out/ci_stdout.log
+          echo $? > _ci_out/exit_code.txt
+          exit 0
+
+      - name: Show quick summary
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p _ci_out
-          python scripts/ci_band_suite.py --pattern "test_data/band_*.csv" --outdir "_ci_out/bands"
+          echo "exit_code:"
+          cat _ci_out/exit_code.txt || true
+          echo ""
+          echo "FILES in _ci_out:"
+          find _ci_out -maxdepth 4 -type f -print || true
+          echo ""
+          if [ -f _ci_out/band_suite_summary.json ]; then
+            echo "band_suite_summary.json:"
+            cat _ci_out/band_suite_summary.json
+          fi
+          echo ""
+          if [ -f _ci_out/exception.txt ]; then
+            echo "exception.txt:"
+            sed -n '1,200p' _ci_out/exception.txt
+          fi
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: band_suite_artifacts
-          path: |
-            _ci_out/
+          path: _ci_out/
           if-no-files-found: error
+
+      - name: Fail if suite failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(cat _ci_out/exit_code.txt || echo 99)
+          echo "suite_exit_code=$code"
+          if [ "$code" != "0" ]; then
+            exit 1
+          fi

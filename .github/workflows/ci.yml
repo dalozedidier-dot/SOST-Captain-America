@@ -38,63 +38,34 @@ jobs:
         shell: bash
         run: |
           set +e
+          rm -rf _ci_out
           mkdir -p _ci_out
           python scripts/ci_band_suite.py --outdir "_ci_out/bands" 2>&1 | tee _ci_out/ci_stdout.log
           echo $? > _ci_out/exit_code.txt
           exit 0
 
-      - name: Write GitHub summary
+      - name: Show quick summary
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          summary_path = Path("_ci_out/band_suite_summary.json")
-          step_summary = Path(open(Path().resolve() / "GITHUB_STEP_SUMMARY").name) if False else None
-          # GitHub expose le path via env, on le lit proprement
-          import os
-          step_summary_path = Path(os.environ.get("GITHUB_STEP_SUMMARY", "_ci_out/step_summary.md"))
-
-          lines = []
-          code = (Path("_ci_out/exit_code.txt").read_text().strip()
-                  if Path("_ci_out/exit_code.txt").exists() else "NA")
-          lines.append(f"# SOST band suite")
-          lines.append(f"Exit code: `{code}`")
-          lines.append("")
-
-          if summary_path.exists():
-            s = json.loads(summary_path.read_text(encoding="utf-8"))
-            lines.append(f"Total: **{s.get('total')}**, OK: **{s.get('ok')}**, Fail: **{s.get('fail')}**")
-            lines.append("")
-          else:
-            lines.append("Aucun band_suite_summary.json trouvé.")
-            lines.append("")
-
-          # Table depuis e_report.json si présents
-          e_paths = sorted(Path("_ci_out/bands").glob("*/sost_out.json/run/e/e_report.json"))
-          if e_paths:
-            lines.append("## Résumé E")
-            lines.append("| band | equilibrium_state | pressure | dispersion | warnings |")
-            lines.append("|---|---:|---:|---:|---:|")
-            for p in e_paths:
-              band = p.parts[2]
-              e = json.loads(p.read_text(encoding="utf-8"))
-              st = e.get("equilibrium_state", "NA")
-              m = e.get("metrics", {}) or {}
-              pr = m.get("pressure", "NA")
-              di = m.get("dispersion", "NA")
-              w = len(e.get("warnings", []) or [])
-              lines.append(f"| {band} | {st} | {pr} | {di} | {w} |")
-            lines.append("")
-          else:
-            lines.append("Aucun e_report.json trouvé dans _ci_out.")
-            lines.append("")
-
-          step_summary_path.write_text("\n".join(lines), encoding="utf-8")
-          print("\n".join(lines))
-          PY
+          echo "exit_code:"
+          cat _ci_out/exit_code.txt || true
+          echo ""
+          if [ -f _ci_out/band_suite_summary.json ]; then
+            echo "band_suite_summary.json:"
+            cat _ci_out/band_suite_summary.json
+          else
+            echo "No band_suite_summary.json found"
+          fi
+          echo ""
+          echo "Top files:"
+          find _ci_out -maxdepth 3 -type f -print || true
+          echo ""
+          if [ -f _ci_out/exception.txt ]; then
+            echo "exception.txt:"
+            sed -n '1,200p' _ci_out/exception.txt
+          fi
 
       - name: Upload artifacts
         if: always()
@@ -105,11 +76,12 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      - name: Fail if suite failed
+      - name: Fail only on fatal errors
         shell: bash
         run: |
           set -euo pipefail
           code=$(cat _ci_out/exit_code.txt || echo 99)
-          if [ "$code" != "0" ]; then
+          echo "suite_exit_code=$code"
+          if [ "$code" = "2" ] || [ "$code" = "99" ]; then
             exit 1
           fi

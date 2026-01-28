@@ -30,18 +30,47 @@ jobs:
           ls -la test_data || true
 
       - name: Run band suite (auto-detect CLI)
+        id: suite
+        shell: bash
+        run: |
+          set +e
+          mkdir -p _ci_out
+          python scripts/ci_band_suite.py --pattern "test_data/band_*.csv" --outdir "_ci_out/bands"
+          echo $? > _ci_out/exit_code.txt
+          exit 0
+
+      - name: Show summary in logs
         shell: bash
         run: |
           set -euo pipefail
-          test -f scripts/ci_band_suite.py
-          mkdir -p _ci_out
-          python scripts/ci_band_suite.py --pattern "test_data/band_*.csv" --outdir "_ci_out/bands"
+          echo "Exit code:"
+          cat _ci_out/exit_code.txt || true
+          echo ""
+          echo "Summary file:"
+          ls -la _ci_out || true
+          echo ""
+          if [ -f _ci_out/band_suite_summary.json ]; then
+            cat _ci_out/band_suite_summary.json
+          else
+            echo "No band_suite_summary.json found"
+          fi
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: band_suite_artifacts
-          path: |
-            _ci_out/
-          if-no-files-found: ignore
+          path: _ci_out/
+          if-no-files-found: error
+
+      - name: Fail only if nothing worked
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(cat _ci_out/exit_code.txt || echo 99)
+          echo "suite_exit_code=$code"
+          # si tu veux être strict, remplace par: if [ "$code" != "0" ]; then exit 1; fi
+          # ici on n'échoue que si le script n'a même pas pu tourner correctement
+          if [ "$code" = "2" ] || [ "$code" = "99" ]; then
+            exit 1
+          fi

@@ -16,17 +16,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
+
+      - name: Debug repo layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          pwd
+          ls -la
+          ls -la test_data || true
+          ls -la scripts || true
 
       - name: Install
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install -U pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-          pip install -U pytest
+          python -m pip install -U pytest
+
+          # Si tu as un requirements.txt plus tard, tu peux ajouter :
+          # if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run band suite
         shell: bash
